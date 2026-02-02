@@ -127,7 +127,7 @@ a {
   position: absolute;
   width: 35px;
   height: 35px;
-  background: url("logo-light.png");
+  background: url("../logo-light.png");
   background-repeat: no-repeat;
   background-size: 28px;
   background-position: center;
