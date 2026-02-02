@@ -107,11 +107,13 @@ a {
   position: absolute;
   top: 0;
   left: 0;
-  /* tiles in both directions */
-  background: url("../texture.png") repeat;
-  background-size: auto;        /* keeps native size */
+  background: url(../texture.png);
+  background-size: auto;
   opacity: 0.6;
   z-index: -1;
+  background-repeat: repeat;
+  background-origin: border-box;
+  background-size: 250px auto;
 }
 
 #nav-con {

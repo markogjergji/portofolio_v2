@@ -3,54 +3,7 @@ window.history.scrollRestoration = 'manual';
 window.scrollTo(0, 0);
 
 window.addEventListener("DOMContentLoaded", () => {
-  // Ensure we're at the top after DOM loads too
   window.scrollTo(0, 0);
-  // ============ SMOOTH SCROLL (LENIS-LIKE) ============
-  class SmoothScroll {
-    constructor() {
-      this.current = 0;
-      this.target = 0;
-      this.ease = 0.08;
-      this.rafId = null;
-      this.init();
-    }
-    init() {
-      window.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        this.target += e.deltaY;
-        this.target = Math.max(0, Math.min(this.target, document.body.scrollHeight - window.innerHeight));
-      }, { passive: false });
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowDown') { e.preventDefault(); this.target += 100; }
-        if (e.key === 'ArrowUp') { e.preventDefault(); this.target -= 100; }
-        if (e.key === 'PageDown') { e.preventDefault(); this.target += window.innerHeight; }
-        if (e.key === 'PageUp') { e.preventDefault(); this.target -= window.innerHeight; }
-        if (e.key === 'Home') { e.preventDefault(); this.target = 0; }
-        if (e.key === 'End') { e.preventDefault(); this.target = document.body.scrollHeight - window.innerHeight; }
-        this.target = Math.max(0, Math.min(this.target, document.body.scrollHeight - window.innerHeight));
-      });
-      document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', (e) => {
-          e.preventDefault();
-          const targetId = anchor.getAttribute('href');
-          const targetEl = document.querySelector(targetId);
-          if (targetEl) {
-            const rect = targetEl.getBoundingClientRect();
-            this.target = window.pageYOffset + rect.top;
-          }
-        });
-      });
-      this.animate();
-    }
-    animate() {
-      this.current += (this.target - this.current) * this.ease;
-      if (Math.abs(this.target - this.current) > 0.5) {
-        window.scrollTo(0, this.current);
-      }
-      this.rafId = requestAnimationFrame(() => this.animate());
-    }
-  }
-  //const smoothScroll = new SmoothScroll();
 
   // ============ VERTICAL LINES VISIBILITY ============
   const verticalLines = document.querySelector('.vertical-lines');
@@ -63,11 +16,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!aboutSection || !verticalLines) return;
     const aboutTop = aboutSection.getBoundingClientRect().top;
     const triggerPoint = window.innerHeight * 0.8;
-    if (aboutTop <= triggerPoint) {
-      verticalLines.style.opacity = '1';
-    } else {
-      verticalLines.style.opacity = '0';
-    }
+    verticalLines.style.opacity = aboutTop <= triggerPoint ? '1' : '0';
   }
   window.addEventListener('scroll', checkLinesVisibility);
   checkLinesVisibility();
@@ -111,24 +60,28 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // ============ CANVAS ERASER WITH FLASH EFFECT & SMOOTH INTERPOLATION ============
+  // ============ CANVAS ERASER WITH FLASH EFFECT ============
   setTimeout(() => { initCanvasEraser(); }, 2700);
 
   function initCanvasEraser() {
     const canvasDiv = document.getElementById("canvas");
     if (!canvasDiv) return;
+
     const canvas = document.createElement("canvas");
     canvas.style.position = "absolute";
     canvas.style.top = "0";
     canvas.style.left = "0";
     canvas.style.pointerEvents = "none";
+
     const permanentCanvas = document.createElement("canvas");
     permanentCanvas.style.position = "absolute";
     permanentCanvas.style.top = "0";
     permanentCanvas.style.left = "0";
     permanentCanvas.style.pointerEvents = "none";
+
     canvasDiv.appendChild(permanentCanvas);
     canvasDiv.appendChild(canvas);
+
     const ctx = canvas.getContext("2d");
     const permCtx = permanentCanvas.getContext("2d");
     const radius = 125;
@@ -137,30 +90,107 @@ window.addEventListener("DOMContentLoaded", () => {
     const flashColor = { r: 66, g: 66, b: 66 };
     const finalColor = { r: 17, g: 17, b: 17 };
 
-    // Track last position for interpolation
     let lastPos = null;
-    const INTERPOLATION_SPACING = radius * 0.4; // Distance between interpolated circles
+    const INTERPOLATION_SPACING = radius * 0.4;
+
+    // Store the permanent canvas data for redraw
+    let permImageData = null;
+
+    function getFullHeight() {
+      // Get the maximum possible height including all content
+      return Math.max(
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.clientHeight,
+        document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight
+      );
+    }
+
+    function getFullWidth() {
+      return Math.max(
+        document.body.scrollWidth,
+        document.body.offsetWidth,
+        document.documentElement.clientWidth,
+        document.documentElement.scrollWidth,
+        document.documentElement.offsetWidth
+      );
+    }
+
+    let currentWidth = 0;
+    let currentHeight = 0;
+    let resizeTimeout = null;
 
     function resizeCanvas() {
-      const w = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
-      const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      [canvas, permanentCanvas].forEach(c => {
-        c.width = w; c.height = h;
-        c.style.width = w + "px"; c.style.height = h + "px";
-      });
+      const w = getFullWidth();
+      const h = getFullHeight();
+
+      // Only resize if dimensions actually changed significantly
+      // This prevents constant resizing on mobile toolbar show/hide
+      if (Math.abs(w - currentWidth) < 10 && Math.abs(h - currentHeight) < 50) {
+        return;
+      }
+
+      // Save existing permanent canvas content before resize
+      if (currentWidth > 0 && currentHeight > 0) {
+        permImageData = permCtx.getImageData(0, 0, permanentCanvas.width, permanentCanvas.height);
+      }
+
+      currentWidth = w;
+      currentHeight = h;
+
+      // Resize canvases
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+
+      permanentCanvas.width = w;
+      permanentCanvas.height = h;
+      permanentCanvas.style.width = w + "px";
+      permanentCanvas.style.height = h + "px";
+
+      // Restore permanent canvas content after resize
+      if (permImageData) {
+        permCtx.putImageData(permImageData, 0, 0);
+      }
     }
+
+    // Initial resize
     resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
+
+    // Debounced resize handler to avoid issues with mobile toolbar
+    function handleResize() {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        resizeCanvas();
+      }, 250);
+    }
+
+    window.addEventListener("resize", handleResize);
+
+    // Also check on orientationchange for mobile
+    window.addEventListener("orientationchange", () => {
+      setTimeout(resizeCanvas, 500);
+    });
 
     function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
     function lerpColor(c1, c2, t) {
-      return { r: Math.round(c1.r + (c2.r - c1.r) * t), g: Math.round(c1.g + (c2.g - c1.g) * t), b: Math.round(c1.b + (c2.b - c1.b) * t) };
+      return {
+        r: Math.round(c1.r + (c2.r - c1.r) * t),
+        g: Math.round(c1.g + (c2.g - c1.g) * t),
+        b: Math.round(c1.b + (c2.b - c1.b) * t)
+      };
     }
 
     let animationRunning = false;
+
     function animate() {
       const now = Date.now();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
       for (let i = 0; i < flashingCircles.length; i++) {
         const c = flashingCircles[i];
         const elapsed = now - c.startTime;
@@ -179,22 +209,28 @@ window.addEventListener("DOMContentLoaded", () => {
           ctx.fill();
         }
       }
+
       for (let i = flashingCircles.length - 1; i >= 0; i--) {
         if (flashingCircles[i].done) flashingCircles.splice(i, 1);
       }
-      if (flashingCircles.length > 0) requestAnimationFrame(animate);
-      else animationRunning = false;
+
+      if (flashingCircles.length > 0) {
+        requestAnimationFrame(animate);
+      } else {
+        animationRunning = false;
+      }
     }
 
     function addCircleAt(x, y) {
-      const now = Date.now();
-      flashingCircles.push({ x, y, startTime: now });
-      if (!animationRunning) { animationRunning = true; requestAnimationFrame(animate); }
+      flashingCircles.push({ x, y, startTime: Date.now() });
+      if (!animationRunning) {
+        animationRunning = true;
+        requestAnimationFrame(animate);
+      }
     }
 
     function addCircleWithInterpolation(x, y) {
       if (lastPos === null) {
-        // First point, just add it
         addCircleAt(x, y);
         lastPos = { x, y };
         return;
@@ -204,25 +240,17 @@ window.addEventListener("DOMContentLoaded", () => {
       const dy = y - lastPos.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < INTERPOLATION_SPACING) {
-        // Too close, skip to avoid overdraw
-        return;
-      }
+      if (dist < INTERPOLATION_SPACING) return;
 
-      // Calculate how many intermediate points we need
       const steps = Math.ceil(dist / INTERPOLATION_SPACING);
-
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        const ix = lastPos.x + dx * t;
-        const iy = lastPos.y + dy * t;
-        addCircleAt(ix, iy);
+        addCircleAt(lastPos.x + dx * t, lastPos.y + dy * t);
       }
 
       lastPos = { x, y };
     }
 
-    // Reset lastPos when mouse leaves or touch ends for cleaner separate strokes
     function resetLastPos() {
       lastPos = null;
     }
@@ -234,11 +262,13 @@ window.addEventListener("DOMContentLoaded", () => {
       const t = e.touches[0];
       addCircleWithInterpolation(t.pageX, t.pageY);
     }, { passive: true });
+
     document.addEventListener('touchstart', (e) => {
-      resetLastPos(); // Reset on new touch
+      resetLastPos();
       const t = e.touches[0];
       addCircleWithInterpolation(t.pageX, t.pageY);
     }, { passive: true });
+
     document.addEventListener('touchend', resetLastPos, { passive: true });
   }
 
@@ -259,25 +289,21 @@ window.addEventListener("DOMContentLoaded", () => {
     }, 20);
   }
 
+  // ============ CONTACT SECTION INVERSION ============
   const contactSection = document.getElementById('contact');
+  if (contactSection) {
+    const contactObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          contactSection.classList.add('inverted');
+          document.body.classList.add('inverted');
+        } else {
+          contactSection.classList.remove('inverted');
+          document.body.classList.remove('inverted');
+        }
+      });
+    }, { root: null, rootMargin: '-20% 0px -20% 0px', threshold: 0.3 });
 
-  const observerOptions2 = {
-    root: null,
-    rootMargin: '-20% 0px -20% 0px',
-    threshold: 0.3
-  };
-
-  const contactObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        contactSection.classList.add('inverted');
-        document.body.classList.add('inverted');
-      } else {
-        contactSection.classList.remove('inverted');
-        document.body.classList.remove('inverted');
-      }
-    });
-  }, observerOptions2);
-
-  contactObserver.observe(contactSection);
+    contactObserver.observe(contactSection);
+  }
 });
